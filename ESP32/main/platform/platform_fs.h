@@ -9,5 +9,6 @@ int platform_fs_open(const char *path, int flags);
 ssize_t platform_fs_read(int fd, void *buffer, size_t size);
 off_t platform_fs_seek(int fd, off_t offset, int whence);
 int platform_fs_size(int fd);
+void platform_fs_init(void);
 
 #endif

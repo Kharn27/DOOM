@@ -35,6 +35,7 @@ rcsid[] = "$Id: m_bbox.c,v 1.1 1997/02/03 22:45:10 b1 Exp $";
 
 #ifdef DOOM_ESP32
 #include "platform/platform_time.h"
+#include "esp_heap_caps.h"
 #endif
 
 #include "doomdef.h"
@@ -81,7 +82,11 @@ int  I_GetHeapSize (void)
 byte* I_ZoneBase (int*	size)
 {
     *size = mb_used*1024*1024;
+#ifdef DOOM_ESP32
+    return (byte *)heap_caps_malloc(*size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+#else
     return (byte *) malloc (*size);
+#endif
 }
 
 
@@ -140,6 +145,14 @@ void I_Quit (void)
 
 void I_WaitVBL(int count)
 {
+#ifdef DOOM_ESP32
+    uint32_t start = platform_millis();
+    uint32_t delay_ms = (uint32_t)((count * 1000U) / 70U);
+
+    while ((platform_millis() - start) < delay_ms)
+    {
+    }
+#else
 #ifdef SGI
     sginap(1);                                           
 #else
@@ -147,6 +160,7 @@ void I_WaitVBL(int count)
     sleep(0);
 #else
     usleep (count * (1000000/70) );                                
+#endif
 #endif
 #endif
 }
@@ -162,8 +176,12 @@ void I_EndRead(void)
 byte*	I_AllocLow(int length)
 {
     byte*	mem;
-        
+
+#ifdef DOOM_ESP32
+    mem = (byte *)heap_caps_malloc(length, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+#else
     mem = (byte *)malloc (length);
+#endif
     memset (mem,0,length);
     return mem;
 }
