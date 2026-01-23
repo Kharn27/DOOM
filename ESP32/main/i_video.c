@@ -2,6 +2,9 @@
 
 #include <string.h>
 
+#include "esp_heap_caps.h"
+#include "esp_log.h"
+
 #include "d_event.h"
 #include "d_main.h"
 #include "doomdef.h"
@@ -10,11 +13,23 @@
 #include "platform/platform_input.h"
 #include "platform/platform_lcd.h"
 
-static uint16_t rgb565_frame[SCREENWIDTH * SCREENHEIGHT];
+static uint16_t *rgb565_frame;
+static uint16_t rgb565_frame_fallback[SCREENWIDTH * SCREENHEIGHT];
 static uint16_t rgb565_palette[256];
+static const char *TAG = "doom_video";
 
 void I_InitGraphics(void)
 {
+    if (!rgb565_frame)
+    {
+        rgb565_frame = heap_caps_malloc(SCREENWIDTH * SCREENHEIGHT * sizeof(uint16_t),
+                                        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (!rgb565_frame)
+        {
+            ESP_LOGW(TAG, "PSRAM framebuffer allocation failed, using internal RAM");
+            rgb565_frame = rgb565_frame_fallback;
+        }
+    }
 }
 
 void I_ShutdownGraphics(void)
