@@ -45,6 +45,11 @@ rcsid[] = "$Id: w_wad.c,v 1.5 1997/02/03 16:47:57 b1 Exp $";
 
 #ifdef DOOM_ESP32
 #include "platform/platform_fs.h"
+#include "sdkconfig.h"
+#include "esp_heap_caps.h"
+#include <ctype.h>
+#include <stdlib.h>
+#include <string.h>
 #endif
 
 #ifndef O_BINARY
@@ -71,6 +76,13 @@ int			numlumps;
 
 void**			lumpcache;
 
+#define WAD_MEMORY_HANDLE -2
+
+#ifdef DOOM_ESP32
+static byte* wad_buffer;
+static int wad_buffer_size;
+#endif
+
 
 #define strcmpi	strcasecmp
 
@@ -81,12 +93,21 @@ void strupr (char* s)
 
 int filelength (int handle) 
 { 
+#ifdef DOOM_ESP32
+    int size = platform_fs_size(handle);
+
+    if (size < 0)
+	I_Error ("Error fstating");
+
+    return size;
+#else
     struct stat	fileinfo;
     
     if (fstat (handle,&fileinfo) == -1)
 	I_Error ("Error fstating");
 
     return fileinfo.st_size;
+#endif
 }
 
 static int W_OpenFile(const char *filename)
@@ -98,6 +119,23 @@ static int W_OpenFile(const char *filename)
 #endif
 }
 
+static int W_ReadFile(int handle, void *buffer, int size)
+{
+#ifdef DOOM_ESP32
+    return platform_fs_read(handle, buffer, size);
+#else
+    return read(handle, buffer, size);
+#endif
+}
+
+static int W_SeekFile(int handle, int offset, int whence)
+{
+#ifdef DOOM_ESP32
+    return platform_fs_seek(handle, offset, whence);
+#else
+    return lseek(handle, offset, whence);
+#endif
+}
 
 void
 ExtractFileBase
@@ -166,6 +204,7 @@ void W_AddFile (char *filename)
     filelump_t*		fileinfo;
     filelump_t		singleinfo;
     int			storehandle;
+    int			use_wad_buffer = 0;
     
     // open the file and add to directory
 
@@ -198,25 +237,96 @@ void W_AddFile (char *filename)
     else 
     {
 	// WAD file
-	read (handle, &header, sizeof(header));
-	if (strncmp(header.identification,"IWAD",4))
+#ifdef DOOM_ESP32
+	if (!reloadname && !wad_buffer)
 	{
-	    // Homebrew levels?
-	    if (strncmp(header.identification,"PWAD",4))
+	    int wad_size = platform_fs_size(handle);
+
+	    if (wad_size > 0)
 	    {
-		I_Error ("Wad file %s doesn't have IWAD "
-			 "or PWAD id\n", filename);
+		wad_buffer_size = wad_size;
+#if CONFIG_SPIRAM_USE_MALLOC
+		wad_buffer = malloc(wad_buffer_size);
+#else
+		wad_buffer = heap_caps_malloc(wad_buffer_size, MALLOC_CAP_SPIRAM);
+#endif
+		if (wad_buffer)
+		{
+		    int read_bytes = 0;
+
+		    platform_fs_seek(handle, 0, SEEK_SET);
+		    while (read_bytes < wad_buffer_size)
+		    {
+			int bytes = platform_fs_read(handle,
+						     wad_buffer + read_bytes,
+						     wad_buffer_size - read_bytes);
+			if (bytes <= 0)
+			    break;
+			read_bytes += bytes;
+		    }
+
+		    if (read_bytes == wad_buffer_size)
+		    {
+			memcpy(&header, wad_buffer, sizeof(header));
+			if (strncmp(header.identification,"IWAD",4))
+			{
+			    // Homebrew levels?
+			    if (strncmp(header.identification,"PWAD",4))
+			    {
+				I_Error ("Wad file %s doesn't have IWAD "
+					 "or PWAD id\n", filename);
+			    }
+			}
+			header.numlumps = LONG(header.numlumps);
+			header.infotableofs = LONG(header.infotableofs);
+			length = header.numlumps*sizeof(filelump_t);
+			if (header.infotableofs + length <= wad_buffer_size)
+			{
+			    fileinfo = alloca (length);
+			    memcpy(fileinfo, wad_buffer + header.infotableofs, length);
+			    numlumps += header.numlumps;
+			    use_wad_buffer = 1;
+			}
+			else
+			{
+			    free(wad_buffer);
+			    wad_buffer = NULL;
+			    wad_buffer_size = 0;
+			}
+		    }
+		    else
+		    {
+			free(wad_buffer);
+			wad_buffer = NULL;
+			wad_buffer_size = 0;
+		    }
+		}
 	    }
-	    
-	    // ???modifiedgame = true;		
 	}
-	header.numlumps = LONG(header.numlumps);
-	header.infotableofs = LONG(header.infotableofs);
-	length = header.numlumps*sizeof(filelump_t);
-	fileinfo = alloca (length);
-	lseek (handle, header.infotableofs, SEEK_SET);
-	read (handle, fileinfo, length);
-	numlumps += header.numlumps;
+#endif
+
+	if (!use_wad_buffer)
+	{
+	    W_ReadFile (handle, &header, sizeof(header));
+	    if (strncmp(header.identification,"IWAD",4))
+	    {
+		// Homebrew levels?
+		if (strncmp(header.identification,"PWAD",4))
+		{
+		    I_Error ("Wad file %s doesn't have IWAD "
+			     "or PWAD id\n", filename);
+		}
+		
+		// ???modifiedgame = true;		
+	    }
+	    header.numlumps = LONG(header.numlumps);
+	    header.infotableofs = LONG(header.infotableofs);
+	    length = header.numlumps*sizeof(filelump_t);
+	    fileinfo = alloca (length);
+	    W_SeekFile (handle, header.infotableofs, SEEK_SET);
+	    W_ReadFile (handle, fileinfo, length);
+	    numlumps += header.numlumps;
+	}
     }
 
     
@@ -229,6 +339,13 @@ void W_AddFile (char *filename)
     lump_p = &lumpinfo[startlump];
 	
     storehandle = reloadname ? -1 : handle;
+#ifdef DOOM_ESP32
+    if (use_wad_buffer)
+    {
+	storehandle = WAD_MEMORY_HANDLE;
+	close (handle);
+    }
+#endif
 	
     for (i=startlump ; i<numlumps ; i++,lump_p++, fileinfo++)
     {
@@ -266,13 +383,13 @@ void W_Reload (void)
     if ( (handle = W_OpenFile (reloadname)) == -1)
 	I_Error ("W_Reload: couldn't open %s",reloadname);
 
-    read (handle, &header, sizeof(header));
+    W_ReadFile (handle, &header, sizeof(header));
     lumpcount = LONG(header.numlumps);
     header.infotableofs = LONG(header.infotableofs);
     length = lumpcount*sizeof(filelump_t);
     fileinfo = alloca (length);
-    lseek (handle, header.infotableofs, SEEK_SET);
-    read (handle, fileinfo, length);
+    W_SeekFile (handle, header.infotableofs, SEEK_SET);
+    W_ReadFile (handle, fileinfo, length);
     
     // Fill in lumpinfo
     lump_p = &lumpinfo[reloadlump];
@@ -470,8 +587,24 @@ W_ReadLump
     else
 	handle = l->handle;
 		
-    lseek (handle, l->position, SEEK_SET);
-    c = read (handle, dest, l->size);
+    if (handle == WAD_MEMORY_HANDLE)
+    {
+#ifdef DOOM_ESP32
+	if (!wad_buffer)
+	    I_Error ("W_ReadLump: WAD buffer not available");
+	if (l->position + l->size > wad_buffer_size)
+	    I_Error ("W_ReadLump: lump %i exceeds WAD buffer", lump);
+	memcpy(dest, wad_buffer + l->position, l->size);
+	c = l->size;
+#else
+	I_Error ("W_ReadLump: memory handle not supported");
+#endif
+    }
+    else
+    {
+	W_SeekFile (handle, l->position, SEEK_SET);
+	c = W_ReadFile (handle, dest, l->size);
+    }
 
     if (c < l->size)
 	I_Error ("W_ReadLump: only read %i of %i on lump %i",
