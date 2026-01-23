@@ -43,6 +43,14 @@ rcsid[] = "$Id: w_wad.c,v 1.5 1997/02/03 16:47:57 b1 Exp $";
 #include "i_system.h"
 #include "z_zone.h"
 
+#ifdef DOOM_ESP32
+#include "platform/platform_fs.h"
+#endif
+
+#ifndef O_BINARY
+#define O_BINARY 0
+#endif
+
 #ifdef __GNUG__
 #pragma implementation "w_wad.h"
 #endif
@@ -79,6 +87,15 @@ int filelength (int handle)
 	I_Error ("Error fstating");
 
     return fileinfo.st_size;
+}
+
+static int W_OpenFile(const char *filename)
+{
+#ifdef DOOM_ESP32
+    return platform_fs_open(filename, O_RDONLY | O_BINARY);
+#else
+    return open(filename, O_RDONLY | O_BINARY);
+#endif
 }
 
 
@@ -160,7 +177,7 @@ void W_AddFile (char *filename)
 	reloadlump = numlumps;
     }
 		
-    if ( (handle = open (filename,O_RDONLY | O_BINARY)) == -1)
+    if ( (handle = W_OpenFile (filename)) == -1)
     {
 	printf (" couldn't open %s\n",filename);
 	return;
@@ -246,7 +263,7 @@ void W_Reload (void)
     if (!reloadname)
 	return;
 		
-    if ( (handle = open (reloadname,O_RDONLY | O_BINARY)) == -1)
+    if ( (handle = W_OpenFile (reloadname)) == -1)
 	I_Error ("W_Reload: couldn't open %s",reloadname);
 
     read (handle, &header, sizeof(header));
@@ -447,7 +464,7 @@ W_ReadLump
     if (l->handle == -1)
     {
 	// reloadable file, so use open / read / close
-	if ( (handle = open (reloadname,O_RDONLY | O_BINARY)) == -1)
+	if ( (handle = W_OpenFile (reloadname)) == -1)
 	    I_Error ("W_ReadLump: couldn't open %s",reloadname);
     }
     else
@@ -573,5 +590,3 @@ void W_Profile (void)
     }
     fclose (f);
 }
-
-
