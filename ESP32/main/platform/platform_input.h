@@ -5,5 +5,6 @@
 #include "d_ticcmd.h"
 
 int platform_input_read(event_t *event, ticcmd_t *ticcmd);
+void platform_input_init(void);
 
 #endif

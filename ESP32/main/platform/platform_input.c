@@ -42,3 +42,8 @@ int platform_input_read(event_t *event, ticcmd_t *ticcmd)
     // platform_input_mappings.
     return 0;
 }
+
+void platform_input_init(void)
+{
+    // TODO: Configure GPIOs for button inputs.
+}

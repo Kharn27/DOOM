@@ -28,3 +28,8 @@ int platform_fs_size(int fd)
 
     return (int)fileinfo.st_size;
 }
+
+void platform_fs_init(void)
+{
+    // TODO: Mount SPIFFS/SD card before accessing WAD files.
+}
