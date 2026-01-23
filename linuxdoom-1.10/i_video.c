@@ -24,6 +24,10 @@
 static const char
 rcsid[] = "$Id: i_x.c,v 1.6 1997/02/03 22:45:10 b1 Exp $";
 
+#ifdef DOOM_ESP32
+#error "linuxdoom-1.10/i_video.c is PC-only; use ESP32 platform implementation."
+#endif
+
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/ipc.h>
@@ -1046,5 +1050,4 @@ Expand4
 	xline += step;
     } while (y--);
 }
-
 

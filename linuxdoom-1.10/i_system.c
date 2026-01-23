@@ -31,6 +31,11 @@ rcsid[] = "$Id: m_bbox.c,v 1.1 1997/02/03 22:45:10 b1 Exp $";
 #include <stdarg.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include <stdint.h>
+
+#ifdef DOOM_ESP32
+#include "platform/platform_time.h"
+#endif
 
 #include "doomdef.h"
 #include "m_misc.h"
@@ -87,6 +92,15 @@ byte* I_ZoneBase (int*	size)
 //
 int  I_GetTime (void)
 {
+#ifdef DOOM_ESP32
+    uint32_t newms;
+    static uint32_t basems = 0;
+
+    newms = platform_millis();
+    if (!basems)
+        basems = newms;
+    return (int)((newms - basems) * TICRATE / 1000U);
+#else
     struct timeval	tp;
     struct timezone	tzp;
     int			newtics;
@@ -97,6 +111,7 @@ int  I_GetTime (void)
 	basetime = tp.tv_sec;
     newtics = (tp.tv_sec-basetime)*TICRATE + tp.tv_usec*TICRATE/1000000;
     return newtics;
+#endif
 }
 
 

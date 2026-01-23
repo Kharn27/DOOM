@@ -23,6 +23,10 @@
 static const char
 rcsid[] = "$Id: m_bbox.c,v 1.1 1997/02/03 22:45:10 b1 Exp $";
 
+#ifdef DOOM_ESP32
+#error "linuxdoom-1.10/i_net.c is PC-only; use ESP32 platform implementation."
+#endif
+
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -345,4 +349,3 @@ void I_NetCmd (void)
     else
 	I_Error ("Bad net cmd: %i\n",doomcom->command);
 }
-
