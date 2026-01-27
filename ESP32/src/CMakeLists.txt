@@ -1,0 +1,16 @@
+idf_component_register(
+    SRCS
+        "app_main.c"
+        "i_net.c"
+        "i_sound.c"
+        "i_video.c"
+        "platform/platform_fs.c"
+        "platform/platform_input.c"
+        "platform/platform_lcd.c"
+        "platform/platform_time.c"
+    INCLUDE_DIRS
+        "."
+        "platform"
+    REQUIRES
+        doom
+)
